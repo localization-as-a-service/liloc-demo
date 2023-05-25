@@ -34,7 +34,7 @@ def send_array(socket, array, sensor, timestamp, flags=0, copy=True, track=False
 def imu_stream():
     context = zmq.Context()
     socket = context.socket(zmq.PUSH)
-    socket.connect("tcp://localhost:5555")
+    socket.connect("tcp://192.168.10.101:5555")
     
     imu_pipe = rs.pipeline()
     imu_config = rs.config()
@@ -86,7 +86,7 @@ def camera_stream():
     context = zmq.Context()
     socket = context.socket(zmq.PUSH)
     # socket.connect(f"tcp://{host}:{port}")
-    socket.connect("tcp://localhost:5555")
+    socket.connect("tcp://192.168.10.101:5555")
     
     camera_pipe = rs.pipeline()
     camera_config = rs.config()
@@ -118,6 +118,8 @@ def camera_stream():
             vertices = pc.calculate(depth_frame).get_vertices()
             vertices = np.asanyarray(vertices).view(np.float32).reshape(-1, 3)
             
+            # valid_vertices = np.logical_and(np.logical_and(vertices[:, 0] > 0.25, vertices[:, 1] > 0.25), vertices[:, 2] > 0.25)
+            # vertices = vertices[valid_vertices]
             # pcd = pointcloud.make_pcd(vertices)
             # pcd = pointcloud.downsample(pcd, 0.05)
             # vertices = np.asarray(pcd.points)

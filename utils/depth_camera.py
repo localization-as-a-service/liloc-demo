@@ -3,58 +3,64 @@ import open3d
 import numpy as np
 
 from PIL import Image
+from dataclasses import dataclass
 
-class DepthCamera:
-    def __init__(self, name, metadata) -> None:
-        self.name = name
-        with open(metadata, "r") as f:
+
+@dataclass
+class DepthCameraParams:
+    fx: float
+    fy: float
+    px: float
+    py: float
+    width: int
+    height: int
+    depth_scale: float
+    intrinsics: open3d.camera.PinholeCameraIntrinsic
+    
+    def __init__(self, metadata_fname: str):
+        with open(metadata_fname, "r") as f:
             metadata = json.load(f)
-            self.depth_scale = metadata["depth_scale"]
-            self.width = metadata["width"]
-            self.height = metadata["height"]
             self.fx = metadata["fx"]
             self.fy = metadata["fy"]
             self.px = metadata["px"]
             self.py = metadata["py"]
+            self.width = metadata["width"]
+            self.height = metadata["height"]
+            self.depth_scale = metadata["depth_scale"]
+            self.intrinsics = open3d.camera.PinholeCameraIntrinsic(self.width, self.height, self.fx, self.fy, self.px, self.py)
             
-        self.intrinsics = open3d.camera.PinholeCameraIntrinsic(self.width, self.height, self.fx, self.fy, self.px, self.py)
-        
-    @staticmethod
-    def save_intrinsics(intrinsics, width, height, depth_scale, filename):
-        camera_properties = {
-            "depth_scale": np.round(1 / depth_scale),
-            "width": width,
-            "height": height,
-            "fx": intrinsics.fx,
-            "fy": intrinsics.fy,
-            "px": intrinsics.ppx,
-            "py": intrinsics.ppy
-        }
 
-        json.dump(camera_properties, open(filename, "w"))
-            
-    def read_depth_image(self, depth_file):
-        depth_image = Image.open(depth_file).convert("I")
-        return depth_image
+class DepthCamera:
     
-    def depth_to_point_cloud(self, depth_file):
-        fx, fy = self.intrinsics.get_focal_length()
-        cx, cy = self.intrinsics.get_principal_point()
-        
-        depth_image = self.read_depth_image(depth_file)
-        
-        z = np.array(depth_image) / self.depth_scale
+    @staticmethod
+    def get_meshgrid(camera_params: DepthCameraParams):
+        width, height = camera_params.intrinsics.width, camera_params.intrinsics.height
+        fx, fy = camera_params.intrinsics.get_focal_length()
+        cx, cy = camera_params.intrinsics.get_principal_point()
 
-        x, y = np.meshgrid(np.arange(0, z.shape[1]), np.arange(0, z.shape[0]))
-        x = (x - cx) * z / fx
-        y = (y - cy) * z / fy
+        x = (np.arange(width) - cx) / fx
+        y = (np.arange(height) - cy) / fy
 
-        xyz = np.stack([x, y, z], axis=2)
+        return np.meshgrid(x, y)
+    
+    @staticmethod
+    def read_depth_image(depth_image_fname: str):
+        depth_image = Image.open(depth_image_fname).convert("I")
+        return np.array(depth_image)
+            
+    def __init__(self, camera_params: DepthCameraParams) -> None:
+        self.camera_params = camera_params
+        self.meshgrid = DepthCamera.get_meshgrid(camera_params)
+
+    def depth_image_to_point_cloud(self, depth_image: np.ndarray):
+        z = depth_image / self.camera_params.depth_scale
+        
+        x, y = self.meshgrid
+
+        xyz = np.dstack((x * z, y * z, z))
         xyz = xyz[z > 0]
-        # xyz = xyz.reshape(-1, 3).astype(np.float16)
-        xyz = np.reshape(xyz, (-1, 3))
         
         xpcd = open3d.geometry.PointCloud()
         xpcd.points = open3d.utility.Vector3dVector(xyz)
-        
+
         return xpcd
