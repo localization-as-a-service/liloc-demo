@@ -25,7 +25,8 @@ class GlobalLidar(mp.Process):
         md = dict(
             dtype=str(data.dtype),
             shape=data.shape,
-            timestamp=timestamp
+            timestamp=timestamp,
+            device=self.device
         )
         self.socket.send_json(md, flags | zmq.SNDMORE)
         self.socket.send(data, flags, copy=copy, track=track)
