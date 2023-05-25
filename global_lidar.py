@@ -1,10 +1,16 @@
-import pyrealsense2 as rs
+import platform
 import multiprocessing as mp
 import numpy as np
 import argparse
 import zmq
 
 from time import time, sleep
+
+if platform.uname().machine == 'aarch64':
+    import pyrealsense2.pyrealsense2 as rs
+else:
+    import pyrealsense2 as rs
+
 
 class GlobalLidar(mp.Process):
     
@@ -72,7 +78,7 @@ def main(args, queue):
                 
                 current_t = frames.get_frame_metadata(rs.frame_metadata_value.time_of_arrival)
                 
-                # if current_t - previous_t < 50: continue
+                if current_t - previous_t < 80: continue
                 
                 fps = int(1 / (current_t - previous_t + 1) * 1e3)
                 previous_t = current_t
@@ -86,9 +92,7 @@ def main(args, queue):
                 break
     finally:
         pipeline.stop()
-        
-    
-    
+        print(f"Stopped Recording @ {int(time())}")
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Lidar Capture for Intel RealSense L515')
