@@ -10,7 +10,6 @@ import utils.transform as transform
 import utils.pointcloud as pointcloud
 
 
-
 class LocalRegistration:
     def __init__(self):
         self.imu_data = np.array([]).reshape(0, 7)
