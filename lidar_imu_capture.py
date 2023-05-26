@@ -5,10 +5,32 @@ import cv2
 import numpy as np
 import pandas as pd
 import pyrealsense2 as rs
-
+import multiprocessing as mp
 import utils.pointcloud as pointcloud
 
 from threading import Thread
+
+
+class GPCRequester(mp.Process):
+    def __init__(self, queue: mp.Queue, address: str = "localhost", port: int = 5555):
+        super(GPCRequester, self).__init__()
+        self.queue = queue
+        self.url = f"tcp://{address}:{port}"
+        
+    def run(self) -> None:
+        context = zmq.Context()
+        socket = context.socket(zmq.PAIR)
+        socket.connect(self.url)
+        print("Connected to GPC server")
+        
+        while True:
+            try:
+                data, timestamp = self.queue.get()
+                socket.send_string("Send GPC")
+            except KeyboardInterrupt:
+                break
+            
+        socket.close()
 
 
 def extract_motion_data(timestamp, accel_data, gyro_data):
@@ -85,8 +107,11 @@ def imu_stream():
 def camera_stream():
     context = zmq.Context()
     socket = context.socket(zmq.PUSH)
-    # socket.connect(f"tcp://{host}:{port}")
     socket.connect("tcp://192.168.10.101:5555")
+    
+    lpc_queue = mp.Queue()
+    gpc_requester = GPCRequester(lpc_queue)
+    gpc_requester.start()
     
     camera_pipe = rs.pipeline()
     camera_config = rs.config()
@@ -98,6 +123,7 @@ def camera_stream():
     camera_pipe.start(camera_config)
     
     previous_t = time.time() * 1000
+    global_t = 0
     start_t = time.time()
     elapsed_t = 0
     
@@ -125,7 +151,7 @@ def camera_stream():
             # vertices = np.asarray(pcd.points)
             
             indices = np.random.choice(np.arange(vertices.shape[0]), 10000, replace=False)
-            vertices = vertices[indices]
+            vertices_sampled = vertices[indices]
             
             current_t = frames.get_frame_metadata(rs.frame_metadata_value.time_of_arrival)
             
@@ -137,8 +163,11 @@ def camera_stream():
             message = f"FPS: {fps:2d} | Elapsed Time: {elapsed_t:03.2f}s | " + ("Calibrating" if calibrating else "Recording")
             
             if not calibrating:
-                send_array(socket, vertices, 1, current_t)
+                send_array(socket, vertices_sampled, 1, current_t)
                 # socket.recv()
+                if current_t - global_t > 800:
+                    print("Sending LPC for global registration")
+                    lpc_queue.put((vertices, current_t))
 
             depth_frame = np.asanyarray(depth_frame.get_data())
             # normalize depth frame

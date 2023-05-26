@@ -64,7 +64,6 @@ class GlobalLidarServer(mp.Process):
                 self.global_pcds[device] = vertices
                 print(f"Received Point Cloud from Device {device} at {timestamp}.")
                 # global_pcd = np.vstack(self.global_pcds)
-                # print(f"Global Point Cloud Shape: {global_pcd.shape}")
                 # np.savetxt(f"temp/global.txt", global_pcd)
             except KeyboardInterrupt:
                 break
@@ -108,6 +107,7 @@ if __name__ == '__main__':
     queues = [mp.Queue() for _ in range(num_devices)]
     gls_list = []
     global_queue = mp.Queue()
+    send_gpc = mp.Value('send_gpc', False)
     
     
     for i in range(num_devices):

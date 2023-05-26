@@ -2,8 +2,7 @@ import zmq
 import open3d
 import numpy as np
 import copy
-
-from multiprocessing import Process, Queue
+import multiprocessing as mp
 
 import utils.registration as registration
 import utils.transform as transform
@@ -102,8 +101,8 @@ class LocalRegistration:
         return pointcloud.merge_pcds(trajectory_pcd, 0.05)
 
 
-class SecondaryDevice(Process):
-    def __init__(self, queue):
+class SecondaryDevice(mp.Process):
+    def __init__(self, queue: mp.Queue):
         super(SecondaryDevice, self).__init__()
         self.queue = queue
         self.lr = LocalRegistration()
@@ -121,7 +120,7 @@ class SecondaryDevice(Process):
                 self.lr.update(data, timestamp)
             except KeyboardInterrupt:
                 break
-            
+
 
 def recv_array(socket, flags=0, copy=True, track=False):
     """recv a numpy array"""
@@ -133,7 +132,7 @@ def recv_array(socket, flags=0, copy=True, track=False):
 
 
 def main():
-    queue = Queue()
+    queue = mp.Queue()
     secondary_device = SecondaryDevice(queue)
     secondary_device.start()
 
