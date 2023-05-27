@@ -127,8 +127,10 @@ def global_registration(source, source_feat, global_pcd, global_feat, cell_size,
             if reg_result is None or (len(reg_result.correspondence_set) < len(result_ransac.correspondence_set) and reg_result.fitness < result_ransac.fitness):
                 reg_result = result_ransac
     
-    if refine_enabled and reg_result is not None:
-        reg_result = registration.exec_icp(source, make_pcd(global_pcd), threshold=0.05, trans_init=reg_result.transformation, max_iteration=200)
+    global_pcd = make_pcd(global_pcd)
     
-    return reg_result
+    if refine_enabled and reg_result is not None:
+        reg_result = registration.exec_icp(source, global_pcd, threshold=0.05, trans_init=reg_result.transformation, max_iteration=200)
+    
+    return source, global_pcd, reg_result
 
