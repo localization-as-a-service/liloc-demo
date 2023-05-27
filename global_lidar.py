@@ -43,9 +43,14 @@ class GlobalLidar(mp.Process):
                     depth_frame, timestamp = None, None
                     while not self.queue.empty():
                         depth_frame, timestamp = self.queue.get()
+                        
+                    if depth_frame is None or timestamp is None:
+                        continue
                     
                     # depth_frame, timestamp = self.queue.get()
                     self.send_array(depth_frame, timestamp)
+                    
+                    sleep(0.005)
                 except KeyboardInterrupt:
                     break
         finally:
