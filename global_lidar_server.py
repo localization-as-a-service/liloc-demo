@@ -114,7 +114,7 @@ class GPCServer(mp.Process):
             try:
                 msg = socket.recv_string()
                 print(f"Global Point Cloud Server Received Message: {msg}")
-                if msg == "send_gpc":
+                if msg == "send":
                     self.event.value = 1
             except KeyboardInterrupt:
                 break
