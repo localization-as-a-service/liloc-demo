@@ -14,7 +14,7 @@ else:
 
 class GlobalLidar(mp.Process):
     
-    def __init__(self, queue: mp.Queue, device: int = 0, address: str = 'localhost', port: int = 5555):
+    def __init__(self, queue: mp.Queue, device: int = 0, address: str = 'localhost', port: int = 5554):
         super(GlobalLidar, self).__init__()
         self.device = device
         self.url = f"tcp://{address}:{port}"

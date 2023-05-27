@@ -26,7 +26,7 @@ class GPCRequester(mp.Process):
         while True:
             try:
                 data, timestamp = self.queue.get()
-                socket.send_string("Send GPC")
+                socket.send_string("send_gpc")
             except KeyboardInterrupt:
                 break
             
@@ -196,10 +196,6 @@ def camera_stream():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Intel Lidar L515")
     parser.add_argument("--mode", default="cam", type=str)
-    parser.add_argument("--experiment", default=0, type=int)
-    parser.add_argument("--trial", default=0, type=int)
-    parser.add_argument("--subject", default=0, type=int)
-    parser.add_argument("--sequence", default=0, type=int)
     args = parser.parse_args()
 
     if args.mode == "cam":

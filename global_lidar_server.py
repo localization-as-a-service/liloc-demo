@@ -99,8 +99,9 @@ class GPCServer(mp.Process):
         while True:
             try:
                 msg = socket.recv_string()
-                print(msg)
-                self.event.value = 1
+                print(f"Global Point Cloud Server Received Message: {msg}")
+                if msg == "send_gpc":
+                    self.event.value = 1
             except KeyboardInterrupt:
                 break
             except InterruptedError:
@@ -122,7 +123,7 @@ def recv_array(socket, flags=0, copy=True, track=False):
 def main(queues: List[mp.Queue], processes: List[mp.Process]):
     context = zmq.Context()
     socket = context.socket(zmq.PULL)
-    socket.bind("tcp://*:5555")
+    socket.bind("tcp://*:5554")
 
     while True:
         try:
