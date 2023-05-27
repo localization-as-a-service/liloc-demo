@@ -40,7 +40,7 @@ class GlobalLidarHelper(mp.Process):
                 
                 cv2.imshow("Depth Camera", depth_image)
                 key = cv2.waitKey(1)
-                # np.savetxt(f"temp/dev_{self.device}.txt", pcd)
+                # np.savetxt(f"temp/dev_{self.device}_{time.time_ns()}.txt", vertices)
                 if key & 0xFF == ord('q') or key == 27:
                     cv2.destroyAllWindows()
                     break
@@ -49,16 +49,19 @@ class GlobalLidarHelper(mp.Process):
                 break
             except Empty:
                 break
-            
+        print(f"Stopping Global Lidar Server for Device {self.device}.")
+        
 
-class GlobalLidarServer(mp.Process):
+class GPCStitcher(mp.Process):
     def __init__(self, queue: mp.Queue, event: mp.Value):
-        super(GlobalLidarServer, self).__init__()
+        super(GPCStitcher, self).__init__()
         self.queue = queue
         self.event = event
         self.global_pcds = [np.zeros((1, 3)) for _ in range(4)]
         
     def run(self) -> None:
+        # counter = 0
+        print("Starting Global Point Cloud Stitcher.")
         while True:
             try:
                 vertices, timestamp, device = self.queue.get()
@@ -69,12 +72,18 @@ class GlobalLidarServer(mp.Process):
                     print(f"Sending Global Point Cloud to FCGF @ {timestamp}")
                     global_pcd = np.vstack(self.global_pcds)
                     self.event.value = 0
-                # global_pcd = np.vstack(self.global_pcds)
-                # np.savetxt(f"temp/global.txt", global_pcd)
+                # if counter % 10 == 0:
+                    # global_pcd = np.vstack(self.global_pcds)
+                    # np.savetxt(f"temp/global.txt", global_pcd)
+                    
+                # counter += 1
             except KeyboardInterrupt:
                 break
+            except InterruptedError:
+                break
+        print("Stopping Global Point Cloud Stitcher.")
+        
             
-
 class GPCServer(mp.Process):
     def __init__(self, event: mp.Value, address: str = "*", port: int = 5556):
         super(GPCServer, self).__init__()
@@ -85,8 +94,8 @@ class GPCServer(mp.Process):
         context = zmq.Context()
         socket = context.socket(zmq.PAIR)
         socket.bind(self.url)
-        print("GPC server started")
-        
+        print(f"Starting Global Point Cloud Server @ {self.url}")
+                
         while True:
             try:
                 msg = socket.recv_string()
@@ -94,8 +103,11 @@ class GPCServer(mp.Process):
                 self.event.value = 1
             except KeyboardInterrupt:
                 break
+            except InterruptedError:
+                break
             
         socket.close()
+        print(f"Stopping Global Point Cloud Server @ {self.url}")
 
 
 def recv_array(socket, flags=0, copy=True, track=False):
@@ -107,7 +119,7 @@ def recv_array(socket, flags=0, copy=True, track=False):
     return A.reshape(md["shape"]), md["timestamp"], md["device"]
 
 
-def main(queues: List[mp.Queue], gls_processes: List[mp.Process]):
+def main(queues: List[mp.Queue], processes: List[mp.Process]):
     context = zmq.Context()
     socket = context.socket(zmq.PULL)
     socket.bind("tcp://*:5555")
@@ -125,8 +137,9 @@ def main(queues: List[mp.Queue], gls_processes: List[mp.Process]):
             #     break
             time.sleep(0.001)
         except KeyboardInterrupt:
-            for p in gls_processes:
+            for p in processes:
                 p.terminate()
+                p.join()
             break
         
     socket.close()
@@ -134,7 +147,7 @@ def main(queues: List[mp.Queue], gls_processes: List[mp.Process]):
 if __name__ == '__main__':
     num_devices = 3
     queues = [mp.Queue() for _ in range(num_devices)]
-    gls_list = []
+    processes = []
     global_queue = mp.Queue()
     send_gpc = mp.Value('i', 0)
     
@@ -142,14 +155,15 @@ if __name__ == '__main__':
     for i in range(num_devices):
         gls = GlobalLidarHelper(queues[i], global_queue, i)
         gls.start()
-        gls_list.append(gls)
+        processes.append(gls)
         
-        
-    merger = GlobalLidarServer(global_queue, send_gpc)
-    merger.start()
+    stitcher = GPCStitcher(global_queue, send_gpc)
+    processes.append(stitcher)
+    stitcher.start()
     
     gpc_server = GPCServer(send_gpc)
+    processes.append(gpc_server)
     gpc_server.start()
 
-    main(queues, gls_list)
+    main(queues, processes)
 
