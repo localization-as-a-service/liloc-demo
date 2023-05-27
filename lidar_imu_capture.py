@@ -17,20 +17,34 @@ class GPCRequester(mp.Process):
         self.queue = queue
         self.url = f"tcp://{address}:{port}"
         
+    def _send_array(self, socket, array, idx, flags=0, copy=True, track=False):
+        md = dict(
+            dtype=str(array.dtype),
+            shape=array.shape,
+            idx=idx
+        )
+        socket.send_json(md, flags | zmq.SNDMORE)
+        return socket.send(array, flags, copy=copy, track=track)
+        
     def run(self) -> None:
         context = zmq.Context()
-        socket = context.socket(zmq.PAIR)
-        socket.connect(self.url)
+        socket_to_gpcs = context.socket(zmq.PAIR)
+        socket_to_gpcs.connect(self.url)
+        
+        socket_to_fcgf = context.socket(zmq.PUSH)
+        socket_to_fcgf.connect("tcp://localhost:5557")
+        
         print("Connected to GPC server")
         
         while True:
             try:
                 data, timestamp = self.queue.get()
-                socket.send_string("send_gpc")
+                socket_to_gpcs.send_string("send_gpc")
+                self._send_array(socket_to_gpcs, data, 0)
             except KeyboardInterrupt:
                 break
             
-        socket.close()
+        socket_to_gpcs.close()
 
 
 def extract_motion_data(timestamp, accel_data, gyro_data):

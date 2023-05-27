@@ -59,10 +59,23 @@ class GPCStitcher(mp.Process):
         self.event = event
         self.global_pcds = [np.zeros((1, 3)) for _ in range(4)]
         
+    def _send_array(self, socket, array, idx, flags=0, copy=True, track=False):
+        md = dict(
+            dtype=str(array.dtype),
+            shape=array.shape,
+            idx=idx
+        )
+        socket.send_json(md, flags | zmq.SNDMORE)
+        return socket.send(array, flags, copy=copy, track=track)
+        
     def run(self) -> None:
         # counter = 0
         print("Starting Global Point Cloud Stitcher.")
         while True:
+            context = zmq.Context()
+            socket = context.socket(zmq.PUSH)
+            socket.connect("tcp://localhost:5557")
+            
             try:
                 vertices, timestamp, device = self.queue.get()
                 self.global_pcds[device] = vertices
@@ -71,6 +84,7 @@ class GPCStitcher(mp.Process):
                 if self.event.value:
                     print(f"Sending Global Point Cloud to FCGF @ {timestamp}")
                     global_pcd = np.vstack(self.global_pcds)
+                    self._send_array(socket, global_pcd, 1)
                     self.event.value = 0
                 # if counter % 10 == 0:
                     # global_pcd = np.vstack(self.global_pcds)
