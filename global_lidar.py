@@ -100,7 +100,7 @@ if __name__ == "__main__":
     parser.add_argument('-r', '--resolution', type=int, default=640, help='Resolution of the image')
     parser.add_argument('-d', '--device', type=int, default=0, help='Device ID')
     parser.add_argument('-a', '--address', type=str, default='localhost', help='IP Address of the server')
-    parser.add_argument('-p', '--port', type=int, default=5555, help='Port of the server')
+    parser.add_argument('-p', '--port', type=int, default=5554, help='Port of the server')
 
     args = parser.parse_args()
     
