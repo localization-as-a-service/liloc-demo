@@ -38,12 +38,12 @@ class GlobalLidarHelper(mp.Process):
                 
                 self.queue_out.put((vertices[:, :3], timestamp, self.device))
                 
-                cv2.imshow("Depth Camera", depth_image)
-                key = cv2.waitKey(1)
-                # np.savetxt(f"temp/dev_{self.device}_{time.time_ns()}.txt", vertices)
-                if key & 0xFF == ord('q') or key == 27:
-                    cv2.destroyAllWindows()
-                    break
+                # cv2.imshow("Depth Camera", depth_image)
+                # key = cv2.waitKey(1)
+                # # np.savetxt(f"temp/dev_{self.device}_{time.time_ns()}.txt", vertices)
+                # if key & 0xFF == ord('q') or key == 27:
+                #     cv2.destroyAllWindows()
+                #     break
                 
             except KeyboardInterrupt:
                 break
@@ -57,7 +57,7 @@ class GPCStitcher(mp.Process):
         super(GPCStitcher, self).__init__()
         self.queue = queue
         self.event = event
-        self.global_pcds = [np.zeros((1, 3)) for _ in range(4)]
+        self.global_pcds = [np.zeros((1, 3)) for _ in range(3)]
         
     def _send_array(self, socket, array, idx, flags=0, copy=True, track=False):
         md = dict(
@@ -82,14 +82,14 @@ class GPCStitcher(mp.Process):
                 print(f"Received Point Cloud from Device {device} at {timestamp}.")
                 
                 if self.event.value:
-                    print(f"Sending Global Point Cloud to FCGF @ {timestamp}")
-                    global_pcd = np.vstack(self.global_pcds)
+                    global_pcd = np.vstack(self.global_pcds).astype(np.float32).copy()
                     self._send_array(socket, global_pcd, 1)
+                    print(f"Sending Global Point Cloud ({len(global_pcd)}) to FCGF @ {timestamp}")
                     self.event.value = 0
-                # if counter % 10 == 0:
-                    # global_pcd = np.vstack(self.global_pcds)
-                    # np.savetxt(f"temp/global.txt", global_pcd)
-                    
+                # if counter % 100 == 0:
+                #     global_pcd = np.vstack(self.global_pcds).astype(np.float32).copy()
+                #     self._send_array(socket, global_pcd, 1)
+                #     # np.savetxt(f"temp/global_{time.time_ns()}.txt", global_pcd)
                 # counter += 1
             except KeyboardInterrupt:
                 break

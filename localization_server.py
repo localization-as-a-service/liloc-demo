@@ -1,8 +1,10 @@
 import zmq
+import open3d
 import time
 import numpy as np
 import utils.grid_search_rs_unopt as grid_search
 import utils.registration as registration
+import utils.pointcloud as pointcloud
 
 
 # def receive_array(socket, flags=0, copy=True, track=False):
@@ -32,13 +34,28 @@ def main():
     socket = context.socket(zmq.PAIR)
     socket.connect("tcp://localhost:5558")
     
+    # vis = open3d.visualization.Visualizer()
+    # vis.create_window()
+
+    # global_pcd = open3d.geometry.PointCloud()
+    # global_pcd.points = open3d.utility.Vector3dVector(np.zeros((1, 3)))
+    # vis.add_geometry(global_pcd)
+    
     while True:
         try:
             source, source_feat, target, target_feat = receive_array(socket)
             print(f"Source: {source.shape} | Source Feat: {source_feat.shape} | Target: {target.shape} | Target Feat: {target_feat.shape}")
+            # open3d.io.write_point_cloud(f"temp/source_{time.time_ns()}.pcd", pointcloud.make_pcd(source))
+            # open3d.io.write_point_cloud(f"temp/target_{time.time_ns()}.pcd", pointcloud.make_pcd(target))
             source, target, result = grid_search.global_registration(source, source_feat, target, target_feat, cell_size=2, n_random=0.8, refine_enabled=True)
             print(result)
-            registration.view(source, target, result.transformation)
+            # registration.view(source, target, result.transformation)
+            # global_pcd.points = target.points
+            
+            # vis.update_geometry()
+            # vis.poll_events()
+            # vis.update_renderer()
+            # time.sleep(0.005)
         except KeyboardInterrupt:
             break
 
