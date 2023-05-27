@@ -40,7 +40,7 @@ class GPCRequester(mp.Process):
             try:
                 data, timestamp = self.queue.get()
                 socket_to_gpcs.send_string("send")
-                self._send_array(socket_to_gpcs, data, 0)
+                self._send_array(socket_to_fcgf, data, 0)
             except KeyboardInterrupt:
                 break
             
