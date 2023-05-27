@@ -1,5 +1,6 @@
 import time
 import open3d
+import copy
 import zmq
 import numpy as np
 import cv2
@@ -83,8 +84,9 @@ class GPCStitcher(mp.Process):
                 print(f"Received Point Cloud from Device {device} at {timestamp}.")
                 
                 if self.event.value > 0:
+                    # timestamp = copy.copy(self.event.value)
                     global_pcd = np.vstack(self.global_pcds).astype(np.float32).copy()
-                    self._send_array(socket, global_pcd, self.event.value, 1)
+                    self._send_array(socket, global_pcd, timestamp, 1)
                     print(f"Sending Global Point Cloud ({len(global_pcd)}) to FCGF @ {timestamp}")
                     self.event.value = 0
                 # if counter % 100 == 0:
