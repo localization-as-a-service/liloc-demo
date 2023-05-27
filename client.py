@@ -1,35 +1,45 @@
-#
-#   Hello World client in Python
-#   Connects REQ socket to tcp://localhost:5555
-#   Sends "Hello" to server, expects "World" back
-#
-import numpy as np
+import os
 import zmq
+import time
+import open3d
+import numpy as np
+
+from threading import Thread
 
 
-def send_array(socket, A, flags=0, copy=True, track=False):
+def send_array(socket, array, idx, flags=0, copy=True, track=False):
     """send a numpy array with metadata"""
     md = dict(
-        dtype=str(A.dtype),
-        shape=A.shape,
+        dtype=str(array.dtype),
+        shape=array.shape,
+        idx=idx
     )
     socket.send_json(md, flags | zmq.SNDMORE)
-    return socket.send(A, flags, copy=copy, track=track)
+    return socket.send(array, flags, copy=copy, track=track)
 
 
-context = zmq.Context()
+def read_point_cloud(filename):
+    pcd = open3d.io.read_point_cloud(filename)
+    return np.asarray(pcd.points)
 
-#  Socket to talk to server
-print("Connecting to hello world server…")
-socket = context.socket(zmq.REQ)
-socket.connect("tcp://localhost:5555")
 
-#  Do 10 requests, waiting each time for a response
-for request in range(10):
-    # print("Sending request %s …" % request)
-    # socket.send(b"Hello")
-    send_array(socket, np.random.rand(640, 480))
+def main(url):
+    ctx = zmq.Context()
+    s = ctx.socket(zmq.PUSH)
+    sequence_ts = ['1680509270952', '1680509271019', '1680509271085', '1680509271118']
 
-    #  Get the reply.
-    message = socket.recv()
-    print("Received reply %s [ %s ]" % (request, message))
+    s.connect(url)
+
+    for i in sequence_ts:
+        print("Sending LPC @ {}".format(i))
+        send_array(s, read_point_cloud(f"temp/global_reg/{i}.secondary.pcd"), 0)
+        time.sleep(0.05)
+        print("Sending GPC @ {}".format(i))
+        send_array(s, read_point_cloud(f"temp/global_reg/{i}.global.pcd"), 1)
+        time.sleep(0.8)
+        
+    print("Done")
+    s.close()
+    
+if __name__ == '__main__':
+    main('tcp://localhost:5557')

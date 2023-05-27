@@ -12,7 +12,7 @@ from threading import Thread
 
 
 class GPCRequester(mp.Process):
-    def __init__(self, queue: mp.Queue, address: str = "localhost", port: int = 5555):
+    def __init__(self, queue: mp.Queue, address: str = "localhost", port: int = 5556):
         super(GPCRequester, self).__init__()
         self.queue = queue
         self.url = f"tcp://{address}:{port}"
@@ -123,7 +123,7 @@ def camera_stream():
     camera_pipe.start(camera_config)
     
     previous_t = time.time() * 1000
-    global_t = 0
+    global_t = time.time() * 1000
     start_t = time.time()
     elapsed_t = 0
     
@@ -166,8 +166,9 @@ def camera_stream():
                 send_array(socket, vertices_sampled, 1, current_t)
                 # socket.recv()
                 if current_t - global_t > 800:
-                    print("Sending LPC for global registration")
+                    print(f"Sending LPC for global registration after {current_t - global_t} ms")
                     lpc_queue.put((vertices, current_t))
+                    global_t = current_t
 
             depth_frame = np.asanyarray(depth_frame.get_data())
             # normalize depth frame
@@ -187,6 +188,8 @@ def camera_stream():
             break
 
     camera_pipe.stop()
+    gpc_requester.terminate()
+    gpc_requester.join()
     cv2.destroyAllWindows()
                     
 

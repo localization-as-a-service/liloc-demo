@@ -52,9 +52,10 @@ class GlobalLidarHelper(mp.Process):
             
 
 class GlobalLidarServer(mp.Process):
-    def __init__(self, queue: mp.Queue):
+    def __init__(self, queue: mp.Queue, event: mp.Value):
         super(GlobalLidarServer, self).__init__()
         self.queue = queue
+        self.event = event
         self.global_pcds = [np.zeros((1, 3)) for _ in range(4)]
         
     def run(self) -> None:
@@ -63,10 +64,38 @@ class GlobalLidarServer(mp.Process):
                 vertices, timestamp, device = self.queue.get()
                 self.global_pcds[device] = vertices
                 print(f"Received Point Cloud from Device {device} at {timestamp}.")
+                
+                if self.event.value:
+                    print(f"Sending Global Point Cloud to FCGF @ {timestamp}")
+                    global_pcd = np.vstack(self.global_pcds)
+                    self.event.value = 0
                 # global_pcd = np.vstack(self.global_pcds)
                 # np.savetxt(f"temp/global.txt", global_pcd)
             except KeyboardInterrupt:
                 break
+            
+
+class GPCServer(mp.Process):
+    def __init__(self, event: mp.Value, address: str = "*", port: int = 5556):
+        super(GPCServer, self).__init__()
+        self.url = f"tcp://{address}:{port}"
+        self.event = event
+        
+    def run(self) -> None:
+        context = zmq.Context()
+        socket = context.socket(zmq.PAIR)
+        socket.bind(self.url)
+        print("GPC server started")
+        
+        while True:
+            try:
+                msg = socket.recv_string()
+                print(msg)
+                self.event.value = 1
+            except KeyboardInterrupt:
+                break
+            
+        socket.close()
 
 
 def recv_array(socket, flags=0, copy=True, track=False):
@@ -107,7 +136,7 @@ if __name__ == '__main__':
     queues = [mp.Queue() for _ in range(num_devices)]
     gls_list = []
     global_queue = mp.Queue()
-    send_gpc = mp.Value('send_gpc', False)
+    send_gpc = mp.Value('i', 0)
     
     
     for i in range(num_devices):
@@ -116,8 +145,11 @@ if __name__ == '__main__':
         gls_list.append(gls)
         
         
-    merger = GlobalLidarServer(global_queue)
+    merger = GlobalLidarServer(global_queue, send_gpc)
     merger.start()
+    
+    gpc_server = GPCServer(send_gpc)
+    gpc_server.start()
 
     main(queues, gls_list)
 

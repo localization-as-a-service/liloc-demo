@@ -31,7 +31,7 @@ class GPCRequester(mp.Process):
                 break
             
         socket.close()
-        
+
         
 class GPCServer(mp.Process):
     def __init__(self, address: str = "*", port: int = 5555):
@@ -52,23 +52,24 @@ class GPCServer(mp.Process):
                 break
             
         socket.close()
+
         
 def main():
-    queue = mp.Queue()
+    # queue = mp.Queue()
     gpc_server = GPCServer()
     gpc_server.start()
     
-    gpc_requester = GPCRequester(queue)
-    gpc_requester.start()
+    # gpc_requester = GPCRequester(queue)
+    # gpc_requester.start()
     
-    for i in range(10):
-        queue.put((i, time.time()))
-        time.sleep(1)
+    # for i in range(10):
+    #     queue.put((i, time.time()))
+    #     time.sleep(1)
     
-    gpc_requester.terminate()
-    gpc_server.terminate()
+    # gpc_requester.terminate()
+    # gpc_server.terminate()
     
-    gpc_requester.join()
+    # gpc_requester.join()
     gpc_server.join()        
     
     
