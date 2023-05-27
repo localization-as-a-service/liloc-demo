@@ -17,10 +17,11 @@ class GPCRequester(mp.Process):
         self.queue = queue
         self.url = f"tcp://{address}:{port}"
         
-    def _send_array(self, socket, array, idx, flags=0, copy=True, track=False):
+    def _send_array(self, socket, array, timestamp, idx, flags=0, copy=True, track=False):
         md = dict(
             dtype=str(array.dtype),
             shape=array.shape,
+            timestamp=timestamp,
             idx=idx
         )
         socket.send_json(md, flags | zmq.SNDMORE)
@@ -39,8 +40,8 @@ class GPCRequester(mp.Process):
         while True:
             try:
                 data, timestamp = self.queue.get()
-                socket_to_gpcs.send_string("send")
-                self._send_array(socket_to_fcgf, data, 0)
+                socket_to_gpcs.send_string(str(timestamp))
+                self._send_array(socket_to_fcgf, data.astype(np.float32), timestamp, 0)
             except KeyboardInterrupt:
                 break
             
