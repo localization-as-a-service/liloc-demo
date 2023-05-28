@@ -38,8 +38,15 @@ def main():
     # vis.create_window()
 
     # global_pcd = open3d.geometry.PointCloud()
-    # global_pcd.points = open3d.utility.Vector3dVector(np.zeros((1, 3)))
+    # global_pcd.points = open3d.utility.Vector3dVector(np.random.random((100, 3)))
+    # global_pcd.paint_uniform_color([1, 0.706, 0])
+    
+    # local_pcd = open3d.geometry.PointCloud()
+    # local_pcd.points = open3d.utility.Vector3dVector(np.random.random((100, 3)))
+    # local_pcd.paint_uniform_color([0, 0.651, 0.929])
+    
     # vis.add_geometry(global_pcd)
+    # vis.add_geometry(local_pcd)
     
     while True:
         try:
@@ -47,10 +54,16 @@ def main():
             print(f"Source: {source.shape} | Source Feat: {source_feat.shape} | Target: {target.shape} | Target Feat: {target_feat.shape}")
             # open3d.io.write_point_cloud(f"temp/source_{time.time_ns()}.pcd", pointcloud.make_pcd(source))
             # open3d.io.write_point_cloud(f"temp/target_{time.time_ns()}.pcd", pointcloud.make_pcd(target))
-            source, target, result = grid_search.global_registration(source, source_feat, target, target_feat, cell_size=2, n_random=0.8, refine_enabled=True)
+            source, target, result = grid_search.global_registration(source, source_feat, target, target_feat, cell_size=2, n_random=0.5, refine_enabled=True)
             print(result)
             # registration.view(source, target, result.transformation)
+            
             # global_pcd.points = target.points
+            # global_pcd.paint_uniform_color([0, 0.651, 0.929])
+            
+            # source.transform(result.transformation)
+            # local_pcd.points = source.points
+            # local_pcd.paint_uniform_color([1, 0.706, 0])
             
             # vis.update_geometry()
             # vis.poll_events()

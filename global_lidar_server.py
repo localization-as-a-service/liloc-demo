@@ -5,6 +5,8 @@ import zmq
 import numpy as np
 import cv2
 import multiprocessing as mp
+
+from threading import Thread
 from queue import Empty
 
 from typing import List
@@ -59,8 +61,9 @@ class GPCStitcher(mp.Process):
         self.queue = queue
         self.event = event
         self.global_pcds = [np.zeros((1, 3)) for _ in range(3)]
-        
-    def _send_array(self, socket, array, timestamp, idx, flags=0, copy=True, track=False):
+    
+    @staticmethod
+    def send_array(socket, array, timestamp, idx, flags=0, copy=True, track=False):
         md = dict(
             dtype=str(array.dtype),
             shape=array.shape,
@@ -86,7 +89,8 @@ class GPCStitcher(mp.Process):
                 if self.event.value > 0:
                     # timestamp = copy.copy(self.event.value)
                     global_pcd = np.vstack(self.global_pcds).astype(np.float32).copy()
-                    self._send_array(socket, global_pcd, timestamp, 1)
+                    # self._send_array(socket, global_pcd, timestamp, 1)
+                    Thread(target=GPCStitcher.send_array, args=(socket, global_pcd, timestamp, 1)).start()
                     print(f"Sending Global Point Cloud ({len(global_pcd)}) to FCGF @ {timestamp}")
                     self.event.value = 0
                 # if counter % 100 == 0:
