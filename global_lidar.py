@@ -57,7 +57,7 @@ class GlobalLidar(mp.Process):
             self.socket.close()
                         
 
-def main(args, queue):
+def main(args, queue, process):
     if args.resolution == 640:
         width, height = 640, 480
     elif args.resolution == 1280:
@@ -106,6 +106,8 @@ def main(args, queue):
     finally:
         pipeline.stop()
         print(f"Stopped Recording @ {int(time())}")
+        process.terminate()
+        process.join()
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Lidar Capture for Intel RealSense L515')
