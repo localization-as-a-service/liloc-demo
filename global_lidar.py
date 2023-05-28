@@ -122,4 +122,4 @@ if __name__ == "__main__":
     gl = GlobalLidar(queue, args.device, args.address, args.port)
     gl.start()
     
-    main(args, queue)
+    main(args, queue, gl)
