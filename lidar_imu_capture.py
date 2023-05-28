@@ -71,7 +71,7 @@ def send_array(socket, array, sensor, timestamp, flags=0, copy=True, track=False
 def imu_stream():
     context = zmq.Context()
     socket = context.socket(zmq.PUSH)
-    socket.connect("tcp://192.168.10.104:5555")
+    socket.connect("tcp://192.168.10.101:5555")
     
     imu_pipe = rs.pipeline()
     imu_config = rs.config()
@@ -122,10 +122,10 @@ def imu_stream():
 def camera_stream():
     context = zmq.Context()
     socket = context.socket(zmq.PUSH)
-    socket.connect("tcp://192.168.10.104:5555")
+    socket.connect("tcp://192.168.10.101:5555")
     
     lpc_queue = mp.Queue()
-    gpc_requester = GPCRequester(lpc_queue, address="192.168.10.104")
+    gpc_requester = GPCRequester(lpc_queue, address="192.168.10.134")
     gpc_requester.start()
     
     camera_pipe = rs.pipeline()

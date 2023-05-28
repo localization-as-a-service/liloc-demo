@@ -71,7 +71,7 @@ def get_cell_features(vertices, feats, p, cell_size, n_random):
     indices = np.where(indices)[0]
     
     if len(indices) < n_random:
-        return None, None, None
+        return None, None
     
     indices = np.random.choice(indices, int(len(indices) * n_random), replace=False)
 
@@ -103,7 +103,7 @@ def global_registration(source, source_feat, global_pcd, global_feat, cell_size,
     for i in range(len(center_pts)):
         target, target_feat = get_cell_features(global_pcd, global_feat, center_pts[i], cell_size, n_random)
         
-        if len(target.points) < 2000:
+        if not target or len(target.points) < 2000:
             delete_indices.append(i)
             continue
         
