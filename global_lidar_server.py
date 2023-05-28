@@ -89,8 +89,8 @@ class GPCStitcher(mp.Process):
                 if self.event.value > 0:
                     # timestamp = copy.copy(self.event.value)
                     global_pcd = np.vstack(self.global_pcds).astype(np.float32).copy()
-                    # self._send_array(socket, global_pcd, timestamp, 1)
-                    Thread(target=GPCStitcher.send_array, args=(socket, global_pcd, timestamp, 1)).start()
+                    GPCStitcher.send_array(socket, global_pcd, timestamp, 1)
+                    # Thread(target=GPCStitcher.send_array, args=(socket, global_pcd, timestamp, 1)).start()
                     print(f"Sending Global Point Cloud ({len(global_pcd)}) to FCGF @ {timestamp}")
                     self.event.value = 0
                 # if counter % 100 == 0:

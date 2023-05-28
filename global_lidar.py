@@ -76,6 +76,7 @@ def main(args, queue):
 
     try:
         previous_t = time() * 1000
+        start_t = previous_t
 
         while True:
             try:
@@ -89,6 +90,8 @@ def main(args, queue):
                 current_t = frames.get_frame_metadata(rs.frame_metadata_value.time_of_arrival)
                 
                 if current_t - previous_t < 80: continue
+                
+                if current_t - start_t > 60000: break
                 
                 fps = int(1 / (current_t - previous_t + 1) * 1e3)
                 previous_t = current_t
