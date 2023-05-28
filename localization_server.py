@@ -36,7 +36,7 @@ def send_data(socket, timestamp, pcd, transformation, token):
         "transformation": transformation.tolist(),
         "token": token
     }
-    socket.send_json(data)
+    socket.send_json(data, flags=0)
 
 
 def main():
@@ -74,7 +74,7 @@ def main():
             source, target, result = grid_search.global_registration(source, source_feat, target, target_feat, cell_size=2, n_random=0.5, refine_enabled=True)
             print(result)
             
-            send_data(gv_socket, timestamps[0], source, np.asarray(result.transformation), 1)
+            send_data(gv_socket, timestamps[0], target, np.asarray(result.transformation), 1)
             
             # registration.view(source, target, result.transformation)
             

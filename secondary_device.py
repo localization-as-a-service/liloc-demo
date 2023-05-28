@@ -25,14 +25,14 @@ class LocalRegistration:
         self.socket = self.context.socket(zmq.PUSH)
         self.socket.connect("tcp://localhost:5559")
         
-    def _send_data(socket, timestamp, pcd, transformation, token):
+    def _send_data(self, socket, timestamp, pcd, transformation, token):
         data = {
             "timestamp": timestamp,
             "vertices": np.asarray(pcd.points).tolist(),
             "transformation": transformation.tolist(),
             "token": token
         }
-        socket.send_json(data)
+        socket.send_json(data, flags=0)
         
     def update(self, data, timestamp):
         if data.ndim == 1:
@@ -131,19 +131,19 @@ class SecondaryDevice(mp.Process):
     def __init__(self, queue: mp.Queue):
         super(SecondaryDevice, self).__init__()
         self.queue = queue
-        self.lr = LocalRegistration()
-
+        
     def run(self):
+        lr = LocalRegistration()
         while True:
             try:
                 data, timestamp = self.queue.get()
                 
                 if data is None:
-                    x = self.lr.get_trajectory()
+                    x = lr.get_trajectory()
                     open3d.visualization.draw_geometries([x])
                     break
                 
-                self.lr.update(data, timestamp)
+                lr.update(data, timestamp)
             except KeyboardInterrupt:
                 break
 
