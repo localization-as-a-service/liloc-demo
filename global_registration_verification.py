@@ -8,10 +8,14 @@ import copy
 import zmq
 import time
 
+import matplotlib.pyplot as plt
+
 import utils.pointcloud as pointcloud
 import utils.registration as registration
 import utils.grid_search_rs_unopt as grid_search
 import utils.transform as transform
+
+import multiprocessing as mp
 
 
 def validate(T1, T2, T3, t1, t2, max_dist, max_rot):
@@ -133,6 +137,56 @@ class GlobalRegistrationVerification:
                 
             for t in range(self.global_inds[self.found_correct_global_at] - 1, -1, -1):
                 self.global_t[t] = np.dot(self.global_t[t + 1], transform.inv_transform(self.local_t[t + 1]))
+                
+
+class GlobalRegistration(mp.Process):
+    
+    def __init__(self, stop_event: mp.Value):
+        super(GlobalRegistration, self).__init__()
+        self.stop_event = stop_event
+        
+    def _receive_array(self, socket, flags=0, copy=True, track=False):
+        md = socket.recv_json(flags=flags)
+        return md['timestamps'], np.array(md['source']), np.array(md['source_feat']), np.array(md['target']), np.array(md['target_feat'])
+
+
+    def _send_data(self, socket, timestamp, pcd, transformation, token):
+        data = {
+            "timestamp": timestamp,
+            "vertices": np.asarray(pcd.points).tolist(),
+            "transformation": transformation.tolist(),
+            "token": token
+        }
+        socket.send_json(data, flags=0)
+
+        
+    def run(self) -> None:
+        context = zmq.Context()
+        socket = context.socket(zmq.PAIR)
+        socket.connect("tcp://localhost:5558")
+        
+        gv_socket = context.socket(zmq.PUSH)
+        gv_socket.connect("tcp://localhost:5559")
+        
+        while True:
+            try:
+                timestamps, source, source_feat, target, target_feat = self._receive_array(socket)
+                print(f"{timestamps[0]} | Source: {source.shape} | Source Feat: {source_feat.shape} | Target: {target.shape} | Target Feat: {target_feat.shape}")
+
+                source, target, result = grid_search.global_registration(source, source_feat, target, target_feat, cell_size=2, n_random=0.5, refine_enabled=True)
+                registration.describe(source, target, result)
+                
+                self._send_data(gv_socket, timestamps[0], target, np.asarray(result.transformation), 1)
+                
+                if self.stop_event.value > 0:
+                    print("Stopping global registration")
+                    break
+                
+            except KeyboardInterrupt:
+                break
+            
+        socket.close()
+        gv_socket.close()
     
 
 def recv_array(socket, flags=0, copy=True, track=False):
@@ -149,6 +203,11 @@ def main():
     socket = context.socket(zmq.PULL)
     socket.bind("tcp://*:5559")
     
+    stop_event = mp.Value('i', 0)
+    
+    global_registration = GlobalRegistration(stop_event)
+    global_registration.start()
+    
     grv = GlobalRegistrationVerification()
     
     while True:
@@ -159,58 +218,87 @@ def main():
                 grv.update_local(timestamp, pcd, transformation)
             elif token == 1:
                 grv.update_global(timestamp, pcd, transformation)
+                
+                if grv.found_correct_global:
+                    stop_event.value = 1
             else:
                 # for i in range(0, len(grv.sequence_ts), 50):
                 #     registration.view(grv.local_pcds[i], grv.global_pcds[0], grv.global_t[i])  
-                vis = open3d.visualization.Visualizer()
-                vis.create_window()
+                
+                # gpc_points = np.asarray(grv.global_pcds[0].points)
+                # gx, gy = gpc_points[:, 0], gpc_points[:, 2]
+                
+                # trajectory = np.array([grv.global_t[i][:3, 3].tolist() for i in range(len(grv.global_t)) if np.sum(grv.global_t[i]) != 4])
+                # tx, ty = trajectory[:, 0], trajectory[:, 2]
+                
+                # plt.scatter(gx, gy, s=0.1, c="r")
+                # plt.scatter(tx, tx, s=0.1, c="b")
+                # plt.show()
                 
                 num_frames = len(grv.sequence_ts)
-
                 global_pcd = grv.global_pcds[0]
                 global_pcd.paint_uniform_color([0, 0.651, 0.929])
-
-                local_pcd = grv.local_pcds[0]
-                local_pcd.transform(grv.global_t[0])
-                local_pcd.paint_uniform_color([1, 0.706, 0])
-
+                
                 trajectory = [grv.global_t[i][:3, 3].tolist() for i in range(num_frames) if np.sum(grv.global_t[i]) != 4]
                 lines = [[i, i + 1] for i in range(len(trajectory) - 1)]
                 colors = [[1, 0, 0] for i in range(len(lines))]
 
                 line_set = open3d.geometry.LineSet()
-
-                vis.add_geometry(global_pcd)
-                vis.add_geometry(local_pcd)
-                vis.add_geometry(line_set)
+                line_set.points = open3d.utility.Vector3dVector(trajectory)
+                line_set.lines = open3d.utility.Vector2iVector(lines)
+                line_set.colors = open3d.utility.Vector3dVector(colors)
                 
-                skipped_frames = 0
+                open3d.visualization.draw_geometries([global_pcd, line_set])
+                
+                # vis = open3d.visualization.Visualizer()
+                # vis.create_window()
+                
+                # num_frames = len(grv.sequence_ts)
 
-                for i in range(num_frames):
-                    if np.sum(grv.global_t[i]) == 4: 
-                        skipped_frames += 1
-                        continue
+                # global_pcd = grv.global_pcds[0]
+                # global_pcd.paint_uniform_color([0, 0.651, 0.929])
+
+                # local_pcd = grv.local_pcds[0]
+                # local_pcd.transform(grv.global_t[0])
+                # local_pcd.paint_uniform_color([1, 0.706, 0])
+
+                # trajectory = [grv.global_t[i][:3, 3].tolist() for i in range(num_frames) if np.sum(grv.global_t[i]) != 4]
+                # lines = [[i, i + 1] for i in range(len(trajectory) - 1)]
+                # colors = [[1, 0, 0] for i in range(len(lines))]
+
+                # line_set = open3d.geometry.LineSet()
+
+                # vis.add_geometry(global_pcd)
+                # vis.add_geometry(local_pcd)
+                # vis.add_geometry(line_set)
+                
+                # skipped_frames = 0
+
+                # for i in range(num_frames):
+                #     if np.sum(grv.global_t[i]) == 4: 
+                #         skipped_frames += 1
+                #         continue
                     
-                    global_pcd_t = grv.global_pcds[0]
-                    global_pcd.points = global_pcd_t.points
-                    global_pcd.paint_uniform_color([0, 0.651, 0.929])
+                #     global_pcd_t = grv.global_pcds[0]
+                #     global_pcd.points = global_pcd_t.points
+                #     global_pcd.paint_uniform_color([0, 0.651, 0.929])
                     
-                    local_pcd_t = grv.local_pcds[i]
-                    local_pcd_t.transform(grv.global_t[i])
+                #     local_pcd_t = grv.local_pcds[i]
+                #     local_pcd_t.transform(grv.global_t[i])
                     
-                    local_pcd.points = local_pcd_t.points
-                    local_pcd.paint_uniform_color([1, 0.706, 0])
+                #     local_pcd.points = local_pcd_t.points
+                #     local_pcd.paint_uniform_color([1, 0.706, 0])
                     
-                    line_set.points = open3d.utility.Vector3dVector(trajectory[:i+1])
-                    line_set.lines = open3d.utility.Vector2iVector(lines[:i - skipped_frames])
-                    line_set.colors = open3d.utility.Vector3dVector(colors[:i - skipped_frames])
+                #     line_set.points = open3d.utility.Vector3dVector(trajectory[:i+1])
+                #     line_set.lines = open3d.utility.Vector2iVector(lines[:i - skipped_frames])
+                #     line_set.colors = open3d.utility.Vector3dVector(colors[:i - skipped_frames])
                     
-                    vis.update_geometry()
-                    vis.poll_events()
-                    vis.update_renderer()
-                    time.sleep(0.1)
+                #     vis.update_geometry()
+                #     vis.poll_events()
+                #     vis.update_renderer()
+                #     time.sleep(0.1)
                     
-                vis.destroy_window()
+                # vis.destroy_window()
                 
                 break
             
@@ -218,6 +306,10 @@ def main():
             break
         
     socket.close()
+    if global_registration.is_alive():
+        global_registration.terminate()
+        
+    global_registration.join()
 
 if __name__ == "__main__":
     main()
