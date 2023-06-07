@@ -106,35 +106,37 @@ def visualize_trajectory(config: Config):
         vis.update_geometry()
         vis.poll_events()
         vis.update_renderer()
-        sleep(0.1)
+        sleep(0.01)
         
     vis.destroy_window()
 
     
 if __name__ == "__main__":
     config = Config(
-        sequence_dir="../local-registration/data/raw_data",
-        feature_dir="../local-registration/data/features",
-        output_dir="../local-registration/data/trajectories/trajectory/FPFH_outlier_removed",
-        experiment="exp_11",
-        trial="trial_1",
+        sequence_dir="../liloc/data/raw_data",
+        feature_dir="../liloc/data/features",
+        output_dir="../liloc/data/trajectories/trajectory/FPFH_outlier_removed_0.05",
+        experiment="exp_12",
+        trial="trial_2",
         subject="subject-1",
-        sequence="01",
-        groundtruth_dir="data/trajectories/groundtruth",
+        sequence="02",
+        groundtruth_dir="../liloc/data/trajectories/groundtruth",
     )
     
-    config.voxel_size=0.03
+    config.voxel_size=0.05
     config.target_fps=20
     config.min_std=0.5
     
-    for trial in os.listdir(os.path.join(config.feature_dir, config.experiment)):
-        config.trial = trial
-        for subject in os.listdir(os.path.join(config.feature_dir, config.experiment, config.trial, str(config.voxel_size))):
-            config.subject = subject    
-            for sequence in os.listdir(os.path.join(config.feature_dir, config.experiment, config.trial, str(config.voxel_size), config.subject)):
-                config.sequence = sequence
-                print(f"Processing: {config.experiment} >> {config.trial} >> {config.subject} >> {config.sequence}")
-                visualize_trajectory(config)
+    visualize_trajectory(config)
+    
+    # for trial in os.listdir(os.path.join(config.feature_dir, config.experiment)):
+    #     config.trial = trial
+    #     for subject in os.listdir(os.path.join(config.feature_dir, config.experiment, config.trial, str(config.voxel_size))):
+    #         config.subject = subject    
+    #         for sequence in os.listdir(os.path.join(config.feature_dir, config.experiment, config.trial, str(config.voxel_size), config.subject)):
+    #             config.sequence = sequence
+    #             print(f"Processing: {config.experiment} >> {config.trial} >> {config.subject} >> {config.sequence}")
+                # visualize_trajectory(config)
     
     
     
