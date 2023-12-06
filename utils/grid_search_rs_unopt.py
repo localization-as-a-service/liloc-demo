@@ -13,25 +13,58 @@ def make_pcd(points):
     return pcd
 
 
-def get_limits(pcd):
-    x_min, y_min, z_min = np.min(pcd, axis=0)
-    x_max, y_max, z_max = np.max(pcd, axis=0)
+# def get_limits(pcd):
+#     x_min, y_min, z_min = np.min(pcd, axis=0)
+#     x_max, y_max, z_max = np.max(pcd, axis=0)
+
+#     return x_min, x_max, y_min, y_max, z_min, z_max
+
+
+# def get_grid(pcd, cell_size):
+#     x_min, x_max, y_min, y_max, z_min, z_max = get_limits(pcd)
+#     y_val = np.mean([y_min, y_max])
+
+#     points = []
+#     x_n = int((x_max - x_min) // cell_size)
+#     z_n = int((z_max - z_min) // cell_size)
+#     for i in range(z_n):
+#         z0 = float(z_min + cell_size * (i + 1))
+#         for j in range(x_n):
+#             x0 = float(x_min + cell_size * (j + 1))
+#             points.append([x0, y_val, z0])
+
+#     return points
+
+
+# def filter_indices(points, p, cell_size):
+#     px_min = p[0] - cell_size
+#     px_max = p[0] + cell_size
+#     pz_min = p[2] - cell_size
+#     pz_max = p[2] + cell_size
+#     xf = np.logical_and(points[:, 0] > px_min, points[:, 0] < px_max)
+#     zf = np.logical_and(points[:, 2] > pz_min, points[:, 2] < pz_max)
+#     return np.logical_and(xf, zf)
+
+
+def get_limits(xyz):
+    x_min, y_min, z_min = np.min(xyz, axis=0)
+    x_max, y_max, z_max = np.max(xyz, axis=0)
 
     return x_min, x_max, y_min, y_max, z_min, z_max
 
 
-def get_grid(pcd, cell_size):
-    x_min, x_max, y_min, y_max, z_min, z_max = get_limits(pcd)
-    y_val = np.mean([y_min, y_max])
+def get_grid(xyz, cell_size):
+    x_min, x_max, y_min, y_max, z_min, z_max = get_limits(xyz)
+    z0 = np.mean([z_min, z_max])
 
     points = []
     x_n = int((x_max - x_min) // cell_size)
-    z_n = int((z_max - z_min) // cell_size)
-    for i in range(z_n):
-        z0 = float(z_min + cell_size * (i + 1))
+    y_n = int((y_max - y_min) // cell_size)
+    for i in range(y_n):
+        y0 = float(y_min + cell_size * (i + 1))
         for j in range(x_n):
             x0 = float(x_min + cell_size * (j + 1))
-            points.append([x0, y_val, z0])
+            points.append([x0, y0, z0])
 
     return points
 
@@ -39,11 +72,11 @@ def get_grid(pcd, cell_size):
 def filter_indices(points, p, cell_size):
     px_min = p[0] - cell_size
     px_max = p[0] + cell_size
-    pz_min = p[2] - cell_size
-    pz_max = p[2] + cell_size
+    py_min = p[1] - cell_size
+    py_max = p[1] + cell_size
     xf = np.logical_and(points[:, 0] > px_min, points[:, 0] < px_max)
-    zf = np.logical_and(points[:, 2] > pz_min, points[:, 2] < pz_max)
-    return np.logical_and(xf, zf)
+    yf = np.logical_and(points[:, 1] > py_min, points[:, 1] < py_max)
+    return np.logical_and(xf, yf)
 
 
 def make_reg_features(feats):

@@ -61,7 +61,6 @@ def merge_transformation_matrices(start_t, end_t, local_t):
     return local_ts
 
 
-
 class GlobalRegistrationVerification:
     
     def __init__(self):
@@ -88,7 +87,6 @@ class GlobalRegistrationVerification:
     
     def update_global(self, global_timestmap, global_pcd, global_transformation):
         index = np.argwhere(np.array(self.sequence_ts) == global_timestmap).flatten()
-        print(index)
         
         if len(index) == 0:
             print(f"Timestamp {global_timestmap} not found in sequence.")
@@ -162,19 +160,21 @@ class GlobalRegistration(mp.Process):
         
     def run(self) -> None:
         context = zmq.Context()
-        socket = context.socket(zmq.PAIR)
-        socket.connect("tcp://localhost:5558")
+        fcgf_socket = context.socket(zmq.PAIR)
+        fcgf_socket.connect("tcp://localhost:5558")
         
         gv_socket = context.socket(zmq.PUSH)
         gv_socket.connect("tcp://localhost:5559")
         
         while True:
             try:
-                timestamps, source, source_feat, target, target_feat = self._receive_array(socket)
+                timestamps, source, source_feat, target, target_feat = self._receive_array(fcgf_socket)
                 print(f"{timestamps[0]} | Source: {source.shape} | Source Feat: {source_feat.shape} | Target: {target.shape} | Target Feat: {target_feat.shape}")
 
                 source, target, result = grid_search.global_registration(source, source_feat, target, target_feat, cell_size=2, n_random=0.5, refine_enabled=True)
                 registration.describe(source, target, result)
+                
+                # registration.view(source, target, result.transformation)
                 
                 self._send_data(gv_socket, timestamps[0], target, np.asarray(result.transformation), 1)
                 
@@ -185,12 +185,12 @@ class GlobalRegistration(mp.Process):
             except KeyboardInterrupt:
                 break
             
-        socket.close()
+        fcgf_socket.close()
         gv_socket.close()
     
 
 def recv_array(socket, flags=0, copy=True, track=False):
-    data = socket.recv_json(flags=flags)
+    data = socket.recv_json(flags=zmq.NOBLOCK)
     timestamp = data["timestamp"]
     pcd = pointcloud.make_pcd(np.array(data["vertices"]))
     transformation = np.array(data["transformation"])
@@ -220,8 +220,15 @@ def main():
     
     while True:
         try:
-            timestamp, pcd, transformation, token = recv_array(socket)
-            print(f"Timestamp: {timestamp} | Token: {token}")
+            try:
+                timestamp, pcd, transformation, token = recv_array(socket)
+                print(f"Timestamp: {timestamp} | Token: {token}")
+            except zmq.error.Again:
+                vis.update_geometry()
+                vis.poll_events()
+                vis.update_renderer()
+                continue
+            
             if token == 0:
                 grv.update_local(timestamp, pcd, transformation)
                 

@@ -123,7 +123,7 @@ class GPCServer(mp.Process):
                 print(f"Global Point Cloud Server Received Message: {timestamp}")
                 # if msg == "send":
                     # self.event.value = 1
-                self.event.value = int(timestamp)
+                self.event.value = 1 #int(timestamp)
             except KeyboardInterrupt:
                 break
             except InterruptedError:
