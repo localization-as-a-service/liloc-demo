@@ -8,11 +8,10 @@ import numpy as np
 
 import sys
 
-sys.path.append('./hl2ss/Comp_Engine')
-
-import hl2ss_imshow
-import hl2ss
-import hl2ss_3dcv
+from hl2ss import hl2ss_imshow
+from hl2ss import hl2ss
+from hl2ss import hl2ss_3dcv
+from hl2ss import hl2ss_lnm
 
 
 
@@ -22,8 +21,13 @@ def to_timestamp(timestamp):
 def main():
     # HoloLens address
     host = "192.168.10.149"
-    calibration_path = './hl2ss/calibration'
-    utc_offset = 133438974452878952 # client_rc.py to get offset
+    calibration_path = './calib'
+
+    client = hl2ss_lnm.ipc_rc(host, hl2ss.IPCPort.REMOTE_CONFIGURATION)
+    
+    client.open()
+    utc_offset = client.get_utc_offset(32)
+    client.close()
     
     lr = LocalRegistration()
 
@@ -33,13 +37,13 @@ def main():
     xy1, scale = hl2ss_3dcv.rm_depth_compute_rays(uv2xy, calibration_lt.scale)
 
     client = hl2ss.rx_decoded_rm_depth_longthrow(
-        host, 
-        hl2ss.StreamPort.RM_DEPTH_LONGTHROW,
-        hl2ss.ChunkSize.RM_DEPTH_LONGTHROW,
-        hl2ss.StreamMode.MODE_1,
-        hl2ss.PngFilterMode.Paeth
+        host=host, 
+        port=hl2ss.StreamPort.RM_DEPTH_LONGTHROW,
+        chunk=hl2ss.ChunkSize.RM_DEPTH_LONGTHROW,
+        mode=hl2ss.StreamMode.MODE_1,
+        png_filter=hl2ss.PNGFilterMode.PAETH,
+        divisor=1
     )
-    
     
     client.open()
 
@@ -49,6 +53,7 @@ def main():
     while True:
         data = client.get_next_packet()
         current_t = to_timestamp(data.timestamp + utc_offset)
+        # current_t = int(time.time() * 1000)
         
         if start_t is None:
             start_t = current_t
@@ -75,7 +80,7 @@ def main():
             print(f"Triggering global registration after {current_t - global_t} ms")
             global_t = current_t
         
-        if current_t - start_t > 30000:
+        if current_t - start_t > 10000:
             cv2.destroyAllWindows()
             break
         

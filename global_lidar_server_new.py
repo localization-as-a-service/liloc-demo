@@ -141,7 +141,7 @@ class DepthImageRx(mp.Process):
                 depth_image, timestamp, sensor = self.recv_array(socket)
                 self.queues[sensor].put((depth_image, timestamp))
                 
-                # cv2.imshow("Depth Camera", depth_image)
+                # cv2.imshow(f"Depth Camera {sensor}", depth_image)
                 # key = cv2.waitKey(1)
 
                 # if key & 0xFF == ord('q') or key == 27:
@@ -156,7 +156,7 @@ class DepthImageRx(mp.Process):
         
 
 if __name__ == '__main__':
-    num_devices = 2
+    num_devices = 3
     queues = [mp.Queue() for _ in range(num_devices)]
     helpers: List[GlobalLidarHelper] = []
         
@@ -177,13 +177,17 @@ if __name__ == '__main__':
     current_t = time.time() * 1000
     
     global_pcd = open3d.geometry.PointCloud()
+    static_pcd = open3d.io.read_point_cloud("../calibration/env_static.pcd")
+
     
     for helper in helpers:
         pcd = helper.get_latest_depth_frame(current_t - 1000)
         pcd = make_pcd(pcd)
         global_pcd += pcd
         helper.stop()
-        
+
+    global_pcd += static_pcd
+
     open3d.visualization.draw_geometries([global_pcd])
         
     controller.close()

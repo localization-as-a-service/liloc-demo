@@ -119,7 +119,7 @@ class GlobalRegistrationVerification:
                         self.global_target_t[t - 2], self.global_target_t[t - 1], self.global_target_t[t], 
                         merge_transformation_matrices(self.global_inds[t - 2], self.global_inds[t - 1], self.local_t),
                         merge_transformation_matrices(self.global_inds[t - 1], self.global_inds[t], self.local_t),
-                        max_rot=2, max_dist=0.1
+                        max_rot=5, max_dist=0.3
                     )
                     self.found_correct_global = True
                     self.found_correct_global_at = t
