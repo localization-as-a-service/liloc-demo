@@ -6,27 +6,50 @@ import numpy as np
 import cv2
 import multiprocessing as mp
 
+from utils.pointcloud import make_pcd
+from collections import deque
 from threading import Thread
 from queue import Empty
-
+from zmq.utils.monitor import recv_monitor_message
 from typing import List
-
+from threading import Lock
 from utils.depth_camera import DepthCamera, DepthCameraParams
 
-class GlobalLidarHelper(mp.Process):
-    def __init__(self, queue_in: mp.Queue, queue_out: mp.Queue, device: int = 0):
+
+class TimestampArrayBuffer:
+    def __init__(self, max_buffer_size):
+        self.max_buffer_size = max_buffer_size
+        self.buffer = deque()
+
+    def add_data(self, timestamp, array):
+        if len(self.buffer) >= self.max_buffer_size:
+            self.buffer.popleft()
+        self.buffer.append((timestamp, array))
+
+    def get_data(self):
+        return list(self.buffer)
+
+    def find_nearest(self, target_timestamp):
+        nearest_pair = min(self.buffer, key=lambda pair: abs(pair[0] - target_timestamp))
+        return nearest_pair
+
+
+class GlobalLidarHelper(Thread):
+    def __init__(self, queue_in: mp.Queue, device: int = 0):
         super(GlobalLidarHelper, self).__init__()
         self.queue_in = queue_in
-        self.queue_out = queue_out
+        self.buffer = TimestampArrayBuffer(max_buffer_size=30*5)
         self.device = device
         self.camera_params = DepthCameraParams(f"metadata/device-{device}.json")
         self.depth_camera = DepthCamera(self.camera_params)
         self.transformation = np.loadtxt(f"metadata/device-{device}.txt")
+        self.lock = Lock()
+        self.running = True
         
         print(f"Starting Global Lidar Server for Device {device}.")
     
     def run(self):
-        while True:
+        while self.running:
             try:
                 depth_image, timestamp = None, None
                 while not self.queue_in.empty():
@@ -35,158 +58,141 @@ class GlobalLidarHelper(mp.Process):
                 if depth_image is None:
                     continue
                 
-                vertices = self.depth_camera.depth_image_to_point_cloud(depth_image)
-                vertices = np.concatenate((vertices, np.ones((vertices.shape[0], 1))), axis=1)
-                vertices = np.dot(self.transformation, vertices.T).T
+                self.lock.acquire()
                 
-                self.queue_out.put((vertices[:, :3], timestamp, self.device))
+                self.buffer.add_data(timestamp, depth_image)
                 
-                # cv2.imshow("Depth Camera", depth_image)
+                self.lock.release()
+                
+                # cv2.imshow(f"Device {self.device + 1}", depth_image)
+        
                 # key = cv2.waitKey(1)
-                # # np.savetxt(f"temp/dev_{self.device}_{time.time_ns()}.txt", vertices)
+                
+                # cv2.imwrite(f"calib/dev_{self.device}_{timestamp}.png", depth_image)
+                
                 # if key & 0xFF == ord('q') or key == 27:
-                #     cv2.destroyAllWindows()
                 #     break
                 
             except KeyboardInterrupt:
                 break
             except Empty:
                 break
+        
+        # cv2.destroyAllWindows()
+    
         print(f"Stopping Global Lidar Server for Device {self.device}.")
         
-
-class GPCStitcher(mp.Process):
-    def __init__(self, queue: mp.Queue, event: mp.Value):
-        super(GPCStitcher, self).__init__()
-        self.queue = queue
-        self.event = event
-        self.global_pcds = [np.zeros((1, 3)) for _ in range(3)]
+    def get_latest_depth_frame(self, timestamp):
+        self.lock.acquire()
+        _, frame = self.buffer.find_nearest(timestamp)
+        self.lock.release()
+        vertices = self.depth_camera.depth_image_to_point_cloud(frame)
+        vertices = np.concatenate((vertices, np.ones((vertices.shape[0], 1))), axis=1)
+        vertices = np.dot(self.transformation, vertices.T).T
+        
+        return vertices[:, :3]
     
-    @staticmethod
-    def send_array(socket, array, timestamp, idx, flags=0, copy=True, track=False):
-        md = dict(
-            dtype=str(array.dtype),
-            shape=array.shape,
-            timestamp=timestamp,
-            idx=idx
-        )
-        socket.send_json(md, flags | zmq.SNDMORE)
-        return socket.send(array, flags, copy=copy, track=track)
+    def stop(self):
+        self.running = False
         
-    def run(self) -> None:
-        # counter = 0
-        print("Starting Global Point Cloud Stitcher.")
-        while True:
-            context = zmq.Context()
-            socket = context.socket(zmq.PUSH)
-            socket.connect("tcp://localhost:5557")
+
+class GlobalLiDARController:
+    def __init__(self, num_devices: int):
+        self.num_devices = num_devices
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.PUB)
+        self.socket.bind("tcp://*:5556")
+        
+        connections = 0
+        events_socket = self.socket.get_monitor_socket(events=zmq.EVENT_HANDSHAKE_SUCCEEDED)
+        
+        while connections < self.num_devices:
+            # this will block until a handshake was successful
+            recv_monitor_message(events_socket)  
+            connections += 1
+            print("Connection established to ", connections)
+        
+    def send(self, message: str):
+        self.socket.send_string(message)
             
-            try:
-                vertices, timestamp, device = self.queue.get()
-                self.global_pcds[device] = vertices
-                print(f"Received Point Cloud from Device {device} at {timestamp}.")
-                
-                if self.event.value > 0:
-                    # timestamp = copy.copy(self.event.value)
-                    global_pcd = np.vstack(self.global_pcds).astype(np.float32).copy()
-                    GPCStitcher.send_array(socket, global_pcd, timestamp, 1)
-                    # Thread(target=GPCStitcher.send_array, args=(socket, global_pcd, timestamp, 1)).start()
-                    print(f"Sending Global Point Cloud ({len(global_pcd)}) to FCGF @ {timestamp}")
-                    self.event.value = 0
-                # if counter % 100 == 0:
-                #     global_pcd = np.vstack(self.global_pcds).astype(np.float32).copy()
-                #     self._send_array(socket, global_pcd, 1)
-                #     # np.savetxt(f"temp/global_{time.time_ns()}.txt", global_pcd)
-                # counter += 1
-            except KeyboardInterrupt:
-                break
-            except InterruptedError:
-                break
-        print("Stopping Global Point Cloud Stitcher.")
+    def close(self):
+        self.socket.close()
         
-            
-class GPCServer(mp.Process):
-    def __init__(self, event: mp.Value, address: str = "*", port: int = 5556):
-        super(GPCServer, self).__init__()
-        self.url = f"tcp://{address}:{port}"
-        self.event = event
+
+class DepthImageRx(mp.Process):
+    def __init__(self, queues: List[mp.Queue]):
+        super(DepthImageRx, self).__init__()
+        self.queues = queues
         
-    def run(self) -> None:
+    def recv_array(self, socket, flags=0, copy=True, track=False):
+        md = socket.recv_json(flags=flags)
+        msg = socket.recv(flags=flags, copy=copy, track=track)
+        buf = memoryview(msg)
+        A = np.frombuffer(buf, dtype=md["dtype"])
+        return A.reshape(md["shape"]), md["timestamp"], md["device"]
+    
+    def run(self):
         context = zmq.Context()
-        socket = context.socket(zmq.PAIR)
-        socket.bind(self.url)
-        print(f"Starting Global Point Cloud Server @ {self.url}")
-                
+        socket = context.socket(zmq.PULL)
+        socket.bind("tcp://*:5554")
+
         while True:
             try:
-                timestamp = socket.recv_string()
-                print(f"Global Point Cloud Server Received Message: {timestamp}")
-                # if msg == "send":
-                    # self.event.value = 1
-                self.event.value = 1 #int(timestamp)
+                depth_image, timestamp, sensor = self.recv_array(socket)
+                self.queues[sensor].put((depth_image, timestamp))
+                
+                # cv2.imshow(f"Depth Camera {sensor}", depth_image)
+                # key = cv2.waitKey(1)
+
+                # if key & 0xFF == ord('q') or key == 27:
+                #     cv2.destroyAllWindows()
+                #     break
+                
+                time.sleep(0.001)
             except KeyboardInterrupt:
-                break
-            except InterruptedError:
                 break
             
         socket.close()
-        print(f"Stopping Global Point Cloud Server @ {self.url}")
-
-
-def recv_array(socket, flags=0, copy=True, track=False):
-    """recv a numpy array"""
-    md = socket.recv_json(flags=flags)
-    msg = socket.recv(flags=flags, copy=copy, track=track)
-    buf = memoryview(msg)
-    A = np.frombuffer(buf, dtype=md["dtype"])
-    return A.reshape(md["shape"]), md["timestamp"], md["device"]
-
-
-def main(queues: List[mp.Queue], processes: List[mp.Process]):
-    context = zmq.Context()
-    socket = context.socket(zmq.PULL)
-    socket.bind("tcp://*:5554")
-
-    while True:
-        try:
-            depth_image, timestamp, sensor = recv_array(socket)
-            queues[sensor].put((depth_image, timestamp))
-            
-            # cv2.imshow("Depth Camera", depth_image)
-            # key = cv2.waitKey(1)
-
-            # if key & 0xFF == ord('q') or key == 27:
-            #     cv2.destroyAllWindows()
-            #     break
-            time.sleep(0.001)
-        except KeyboardInterrupt:
-            for p in processes:
-                p.terminate()
-                p.join()
-            break
         
-    socket.close()
 
 if __name__ == '__main__':
     num_devices = 3
     queues = [mp.Queue() for _ in range(num_devices)]
-    processes = []
-    global_queue = mp.Queue()
-    send_gpc = mp.Value('i', 0)
-    
-    
-    for i in range(num_devices):
-        gls = GlobalLidarHelper(queues[i], global_queue, i)
-        gls.start()
-        processes.append(gls)
+    helpers: List[GlobalLidarHelper] = []
         
-    stitcher = GPCStitcher(global_queue, send_gpc)
-    processes.append(stitcher)
-    stitcher.start()
+    for i in range(num_devices):
+        gls = GlobalLidarHelper(queues[i], i)
+        gls.start()
+        helpers.append(gls)
+        
+    rx = DepthImageRx(queues)
+    rx.start()
     
-    gpc_server = GPCServer(send_gpc)
-    processes.append(gpc_server)
-    gpc_server.start()
+    controller = GlobalLiDARController(num_devices)
+    time.sleep(5)
+    controller.send("global_lidar start")
+    time.sleep(8)
+    controller.send("global_lidar stop")
+    
+    current_t = time.time() * 1000
+    
+    global_pcd = open3d.geometry.PointCloud()
+    static_pcd = open3d.io.read_point_cloud("../calibration/env_static.pcd")
 
-    main(queues, processes)
+    
+    for helper in helpers:
+        pcd = helper.get_latest_depth_frame(current_t - 1000)
+        pcd = make_pcd(pcd)
+        global_pcd += pcd
+        helper.stop()
+
+    global_pcd += static_pcd
+
+    open3d.visualization.draw_geometries([global_pcd])
+        
+    controller.close()
+    
+    
+    
+    
 
